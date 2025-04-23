@@ -1,0 +1,991 @@
+\documentclass{article}
+
+\usepackage[
+    backend=biber,
+    style=authoryear-icomp,
+    sortlocale=de_DE,
+    natbib=true,
+    url=true, 
+    doi=true,
+    eprint=false
+]{biblatex}
+\addbibresource{thesis.bib}
+
+\usepackage{amsmath}
+\usepackage{mathpartir}
+\usepackage{hyperref}
+\usepackage{todo}
+
+\usepackage{listings}
+\lstset{
+  frame=none,
+  xleftmargin=2pt,
+  % stepnumber=1,
+  % numbers=left,
+  % numbersep=5pt,
+  % numberstyle=\ttfamily\tiny\color[gray]{0.3},
+  belowcaptionskip=\bigskipamount,
+  captionpos=b,
+  escapeinside={*'}{'*},
+  language=haskell,
+  tabsize=2,
+  emphstyle={\bf},
+  commentstyle=\it,
+  stringstyle=\mdseries\rmfamily,
+  showspaces=false,
+  keywordstyle=\bfseries\rmfamily,
+  columns=flexible,
+  basicstyle=\small\sffamily,
+  showstringspaces=false,
+  morecomment=[l]\%,
+  literate={->}{{$\to$}}2 {~}{{$\sim$}}1
+}
+
+
+\title{Full Title}
+\date{ }
+
+\newcommand{\bnflabel}[1]{\text{#1}}
+\newcommand{\bnfdef}{::=}
+\newcommand{\bnfalt}{\mid}
+\newcommand{\bnfcomment}[1]{}% \text{\small \textit{#1}}}
+
+\newcommand{\lamE}[2]{\lambda #1. \text{ } #2}
+\newcommand{\appE}[2]{#1 \text{ } #2}
+\newcommand{\piE}[3]{\Pi #1 : #2. \text{ } #3}
+\newcommand{\pairE}[2]{\langle #1, #2 \rangle}
+\newcommand{\fstE}[1]{\text{fst } #1}
+\newcommand{\sndE}[1]{\text{snd } #1}
+\newcommand{\sigmaE}[3]{\Sigma #1 : #2. \text{ } #3}
+\newcommand{\unitE}{\langle \rangle}
+\newcommand{\unittE}{\text{Unit}}
+\newcommand{\univE}{\text{U}}
+\newcommand{\annE}[2]{#1 : #2}
+
+\newcommand{\checkJ}[3]{#1 \vdash #2 \Leftarrow #3}
+\newcommand{\synthJ}[3]{#1 \vdash #2 \Rightarrow #3}
+\newcommand{\tyEqJ}[4]{#1 \vdash #2 = #3 : #4}
+\newcommand{\stxEqJ}[3]{#1 \vdash #2 = #3}
+\newcommand{\chkEqJ}[4]{#1 \vdash #2 = #3 \Leftarrow #4}
+\newcommand{\synEqJ}[4]{#1 \vdash #2 = #3 \Rightarrow #4}
+\newcommand{\freshJ}[2]{#1 \vdash #2 \text{ fresh}}
+\newcommand{\steps}[2]{#1 \Downarrow #2}
+
+\newcommand{\subst}[3]{#1 [#2 \mapsto #3]}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+\subsection{Proof Assistants}
+
+As \citet{Dijkstra1988} argues, formal methods form a critical part of computer programming.
+The digital nature of the computer means that even a slight error in a program results not in a slight error in output, but entirely unexpected output.
+Formal proof forces the programmer to reason through why he believes his program will do what he intends, and using a proof assistant forces this reasoning to be thorough enough that each step can be justified by some formal system.
+
+The family of proof assistants under consideration of this proposal are those based on a dependent type theory (e.g. Agda, Coq, Lean).
+These systems have an advantage over others, as the programs and proof about these programs are written in a common language \citep{Nordstrom1990}.
+
+For any proof assistant, there is a problem akin to ``Who watches the watchmen?", how does one know that the proof checker is itself correct?
+As a solution to this problem, \citet{Barendregt2005} propose that proof assistants should admit the checking of a proof by a small, independent program (commonly referred to as the ``de Bruijn criterion").
+By their logic, we can trust a proof assistant whose proof checker is simple enough for us to understand, and which allows us to implement our own proof checker if we aren't convinced existing implementations are correct.
+
+Simplicity isn't all there is to a proof checker, however.
+As \citet{Geuvers2008} argues, if the proof checker takes longer than is reasonable to wait, not only is the proof assistant not much use, there can be situations wherein the status of the ``proof" as a proof come into question.
+Therefore, the proof checker must be both simple and ``reasonably" efficient (I take ``reasonably efficient" here to mean ``at least as fast as the others").
+
+Accepting this, one might then ask if a dependently typed proof assistant could satisfy this criterion.
+To assess this, we must first know what it takes to check a proof in a dependent type theory, and even more basically, what a dependent type theory is.
+
+\subsection{Dependent Types}
+
+Just as functional languages treat functions as first class values, dependently typed languages treat types as first class values.
+An example is the following program, 
+
+\begin{verbatim}
+int_or_string : (b : Bool) -> (if b then Int else String)
+int_or_string = \b -> if b then 3141 else "Hello, World!"
+\end{verbatim}
+
+Here the function \verb|int_or_string| has domain \texttt{Bool}, but its codomain depends on which boolean it is passed.
+If it is passed the boolean \texttt{true}, then it will return an \texttt{Int}, specifically \texttt{3141}.
+Otherwise if it is passed \texttt{false}, then it will return the \texttt{String "Hello, World!"}.
+
+As an example of the theorem proving capabilities of this language we could prove the theorem \verb|int_or_string(true) = 3141|.
+
+\begin{verbatim}
+int_or_string_theorem : int_or_string(true) = 3141
+int_or_string_theorem = reflexivity
+\end{verbatim}
+
+Here we define a new variable \verb|int_or_string_theorem| whose \textit{type} is \\ \verb|int_or_string(true) = 3141|.
+Just like how function types are inhabited by functions, or the integer type is inhabited by integers, the equality types are inhabited by proof of the equality.
+Here the proof of equality we have defined \verb|int_or_string_theorem| to be is simply reflexivity, meaning that both sides of the equality are already the same.
+This exhibits one of the more confusing aspects of dependent type theory, equality is not syntactic but up to symbolic execution.
+Two expressions or types are equal if they can be ``run" to the same value.
+
+In fact, we had already seen this in the definition of \verb|int_or_string|.
+One of the judgements of the formal system underlying dependent type theory is the typing judgement taking the form $\Gamma \vdash e : A$, meaning expression $e$ has type $A$ with free variables contained in $\Gamma$.
+So in the true branch of \verb|int_or_string| we make the judgement $b : \verb|Bool| \vdash 3141 : (\verb|if true then Int else String|)$, and since we are reasoning up to symbolic execution this reduces to $b : \verb|Bool| \vdash 3141 : \verb|Int|$.
+
+This ``reasoning up to symbolic execution" is formalized using the second judgement of dependent type theory, the equality judgement.
+This takes the form $\Gamma \vdash a = b : A$, meaning $a$ is judgementally equal to $b$ at type $A$ with free variables $\Gamma$.
+The two judgements then interact with each other with the following deduction rule
+
+\begin{mathpar}
+  \inferrule*[left=(Conv)]{\Gamma \vdash e : B \\ \Gamma \vdash A = B : \texttt{Type}}{\Gamma \vdash e : A}
+\end{mathpar}
+
+Which states that an expression $e$ of type $B$ can also be considered of type $A$ so long as $A$ and $B$ are judgementally equal types.
+
+\subsection{Implementation}
+
+So, the two main components of a proof checker for a dependent type theory are the algorithms for deciding the typing and equality judgements.
+Therefore if our proof assistant based on this theory is to satisfy the de Bruijn criterion there must be simple, efficient algorithms for deciding these judgements.
+
+When writing code which decides if a judgement is provable for the subjects of the judgement, there is a decision to be made about which subjects will be treated as input and which as output.
+For example, in a language with complete type inference (e.g. Haskell, OCaml), the type in the typing judgement is always treated as output while the context and expression are input.
+
+\subsubsection{Typing Judgement}
+
+The Pfenning bidirectional type checking recipe \citep{Dunfield2021} provides a simple algorithm for deciding the typing judgement by carefully choosing when to switch between the input and output modes.
+This recipe splits the operators in the language into two camps, constructors which build an element of a specific type and whose typing rule takes the type as input, and destructors which perform some operation on elements of a specific type and produce their type as output.
+In the example code given above, \verb|\b -> ...|, \verb|3141|, and \verb|"Hello, World!"| are constructors while the \verb|if| operator is a destructor.
+Following this recipe makes the code deciding the typing judgement very regular, making it both simple to read and simple to write.
+Additionally, the algorithm performs a single traversal of the syntax tree, making it reasonably efficient.
+
+\subsubsection{Equality Judgement}
+
+The story for the equality judgement, however, is not so straightforward.
+As \citet{Abel2013} shows, the most widely used approach for deciding judgemental equality is normalization by evaluation (NbE).
+An algorithm for deciding judgemental equality is said to use NbE when it maps the syntax of a language into a semantic domain and then back into syntax.
+Since judgementally equal pieces of syntax will actually be equal in the semantic domain, going there, then back into syntax makes them syntactically equal (a process referred to as ``normalization").
+NbE uses this to turn the problem of deciding judgemental equality into one of giving semantics to syntax and then deciding syntactical equality.
+
+NbE can be much simpler to implement when compared with other algorithms, which may require the notoriously tricky capture avoiding substitution, and it can also be faster than other techniques.
+However, the ``can"'s here are important.
+As described above, NbE isn't specifically a single algorithm, but more of an approach an algorithm can take to decide an equivalence relation.
+
+The simplest NbE algorithms are those based on an environment passing interpreter (henceforth referred to as NbE interpreters) such as \citet{Coquand1996} or \citet{Chapman2005}.
+Comparatively, the implementations of other algorithms are either much larger in scale, such as the compiler into bytecode described in \citet{Grgoire2002}, or require the knowledge of very dense mathematics to understand such as \citet{Ahman2013}.
+In addition, these interpreters can have performance competitive with the most widely used dependently typed languages, as Andras Kovacs' \textit{smalltt}\footnote{\url{https://github.com/AndrasKovacs/smalltt}} demonstrates.
+Therefore, NbE interpreters are the best candidate algorithms for deciding judgemental equality.
+
+However, previous work on NbE interpreters follow an ad-hoc recipe for designing their algorithms.
+When adding new language constructs, it is unclear how to add accompanying equality rules.
+In contrast, bidirectional type checking provides a systematic recipe for adding typing rules for new language constructs by splitting them up into constructors and destructors.
+An algorithm for deciding judgemental equality should also provide a systematic recipe for extending the algorithm to language constructs beyond those considered in its original description.
+
+%% However, previous descriptions of NbE interpreters make different design decisions without a clear picture as to the tradeoffs being made.
+%% For instance, \citet{Coquand1996} describes an algorithm which doesn't support inspecting the type at which two expressions are being compared at, whereas \citet{Chapman2005} allows the type to be inspected during the syntactic equality test.
+%% Another design decision that can be made is to check if the two expressions being compared are syntactically equal before normalizing them, an approach taken in \textit{smalltt}.
+%% Unfortunately, no direct comparison has been made between these different designs, and so their cost, both in implementation and in performance, is unclear.
+%% Therefore, when implementing a proof checker for a dependently typed language, it is unclear what tradeoffs are being made when selecting an algorithm to use.
+
+\subsubsection{Type Directed Rules}
+
+Another problem with NbE interpreters, is that there are different design decisions they can make, without a clear picture as to the tradeoffs being made.
+
+When comparing two terms for judgemental equality, after the terms are normalized, most judgemental equality rules can be decided by simply comparing the syntax of the two terms.
+There are some rules, however, where it is necessary to inspect the type of the two terms to decide if they are equal.
+These rules are called are called ``type-directed" rules.
+One of the design decisions alluded to above is how to handle these sorts of rules.
+
+The algorithm described by \citet{Coquand1996} takes the easy way out and excludes these rules from the theory, resulting in a weaker, syntax-directed, judgemental equality.
+Unfortunately, this approach does not generalize as there are theories, such as Observational Type Theory \citep{Altenkirch2007}, which require type-directed rules.
+
+\citet{Chapman2005} describes an algorithm which supports type-directed rules by giving the type of the two normalized terms as a argument to the procedure deciding their equality.
+The procedure can then inspect the type when it comes across a situation in which a type-directed rule is applicable.
+Another approach is documented by Andras Kovacs in his \textit{elaboration-zoo} \footnote{\url{https://github.com/AndrasKovacs/elaboration-zoo}}.
+There, the type of each term is calculated during normalization and then stored with the normalized term, so it can be inspected as needed during the equality check.
+
+Here we have three different approaches where the tradeoffs they make are unclear.
+It could be the case that handling type-directed rules causes untenable performance loss, or requires unwieldy implementation, meaning theories which require them should be avoided.
+On the other hand, one of the approaches to handling them described above could have minimal performance cost and be quite simple to implement.
+The problem is that no comparison between them has been made, and so there is currently no good way to decide between them.
+
+\subsection{Proposal}
+
+\todo{This should become thesis statement stuff}
+
+I theorize that the algorithm described by \citet{Chapman2005} will perform as well as a purely syntax-directed approach while allowing for theories with a stronger, type-directed, judgemental equality.
+This belief is based on previous experience implementing a type checker for a dependently typed language.
+At the point in the type checker where two terms must be checked for judgemental equality, their type has already been calculated.
+Therefore passing that type into the procedure which decides judgemental equality should have minimal overhead.
+
+Furthermore, I propose a generalization of the ad-hoc design of this algorithm, to a systematic recipe inspired by bidirectional type checking.
+
+In general, judgemental equality rules can be split into two categories \citep{MartinLof1975}.
+The first are called $\beta$ rules, and they occur when a destructor and constructor for some type come into contact.
+The prototypical example for this is for functions.
+When the destructor for functions, function application, meets the constructor for functions, lambda expressions, we get the following judgemental equality rule.
+
+\begin{mathpar}
+  \inferrule*[left=(Fun-$\beta$)]{ }{\Gamma \vdash (\lambda x. b) a = b[x := a] : B}
+\end{mathpar}
+
+The second category of rules are called $\eta$ rules.
+These rules specify that two elements of a type are equal when applying the destructors for that type to both elements yield equal results.
+The eta rule for functions can be given as the following.
+
+\begin{mathpar}
+  \inferrule*[left=(Fun-$\eta$)]{\Gamma, x : A \vdash f(x) = f'(x) : B}{\Gamma \vdash f = f' : A \rightarrow B}
+\end{mathpar}
+
+My proposed systematic recipe, and how previous NbE interpreters have been implicitly designed, is to apply the $\beta$ rules during normalization, then augment the syntactic equality check with the $\eta$ rules.
+
+\hfill\break
+
+\textit{smalltt} already implements a pure syntax-directed judgemental equality in the vein of \citet{Coquand1996}.
+So, to test my claim that my proposed approach retains the performance of the syntax-directed approach, I will modify \textit{smalltt} to use the algorithm described by \citet{Chapman2005}.
+Then, this modified version will be benchmarked against the original \textit{smalltt} with the existing benchmark suite provided by \textit{smalltt}.
+Additionally, to test my systematic recipe, and demonstrate the ability to decide type-directed rules, dependent sums and the unit type, along with their associated $\beta$ and $\eta$ rules as described in \citet{Chapman2005}, will be added to my modified version of \textit{smalltt}.
+
+\section{Main Ideas}
+
+We first present both syntax and type directed equality for a small dependent type theory in which the two equalities differ only in presentation.
+Then, to show that the type directed equality is more general, we extend the theory with both the unit type and dependent pairs \todo{don't imply that dependent pairs are different in type directed equality, just that we want them to show off the recipe}.
+The theory we present is similar to that proposed in \citet{altenkirch2010}.
+
+\subsection{Syntax and Semantics}
+
+\begin{figure}[h]
+  \begin{displaymath}
+    \begin{array}{lrcll}
+      \text{Expressions} & e & \bnfdef & x & \bnfcomment{variables} \\
+      & & \bnfalt & \lamE{x}{e} & \bnfcomment{function literal} \\
+      & & \bnfalt & \appE{e_f}{e_a} & \bnfcomment{function application} \\
+      & & \bnfalt & \piE{x}{e_d}{e_c} & \bnfcomment{dependent function type} \\
+      & & \bnfalt & \univE & \bnfcomment{type universe} \\
+      & & \bnfalt & \annE{e}{e_t} & \bnfcomment{type annotation} \\
+      \\
+      \text{Normal Forms} & n & \bnfdef & \lamE{x}{e} & \\
+      & & \bnfalt & \piE{x}{n_d}{e_c} & \\
+      & & \bnfalt & \univE & \\
+      & & \bnfalt & \nu & \\
+      \\
+      \text{Neutral Terms} & \nu & \bnfdef & x & \\
+      & & \bnfalt & \appE{\nu_f}{n_a} & \\
+      \\
+      \text{Type Contexts} & \Gamma & \bnfdef & \cdot & \\
+      & & \bnfalt & \Gamma, x : n & \\
+    \end{array}
+  \end{displaymath}
+  \caption{Syntax}
+  \label{fig:base-syntax}
+\end{figure}
+
+Before defining the two kinds of judgmental equality, we must first define the theory whose terms we want to judge equal.
+The syntax is presented in \autoref{fig:base-syntax}.
+It consists of expressions $e$ which are either variables $x$, function introduction or elimination forms, dependent function types, the type universe, or a type annotation.
+
+\begin{figure}[h]
+  \fbox{$\steps{e}{n}$}
+  \begin{mathpar}
+    \inferrule*[left=Var$\Downarrow$]
+    {
+    }
+    { \steps{x}{x}
+    }
+
+    \inferrule*[left=$\Pi$-I$\Downarrow$]
+    {
+    }
+    { \steps{\lamE{x}{e}}{\lamE{x}{e}}
+    }
+
+    \inferrule*[left=$\beta\Downarrow$]
+    { \steps{e_f}{\lamE{x}{e_b}} \\
+      \steps{\subst{e_b}{x}{e_a}}{n_b}
+    }
+    { \steps{\appE{e_f}{e_a}}{n_b}
+    }
+
+    \inferrule*[left=$\Pi$-E$\Downarrow$]
+    { \steps{e_f}{\nu_f} \\
+      \steps{e_a}{n_a}
+    }
+    { \steps{\appE{e_f}{e_a}}{\appE{\nu_f}{n_a}}
+    }
+
+    \inferrule*[left=$\Pi$-T$\Downarrow$]
+    { \steps{e_d}{n_d}
+    }
+    { \steps{\piE{x}{n_d}{e_c}}{\piE{x}{n_d}{e_c}}
+    }
+
+    \inferrule*[left=$\univE$-T$\Downarrow$]
+    {
+    }
+    { \steps{\univE}{\univE}
+    }
+
+    \inferrule*[left=Ann$\Downarrow$]
+    { \steps{e}{n}
+    }
+    { \steps{\annE{e}{e_t}}{n}
+    }
+  \end{mathpar}
+  \caption{Big Step Semantics}
+  \label{fig:base-big-step}
+\end{figure}
+
+We then define the operational semantics for the theory in \autoref{fig:base-big-step}.
+The judgement $\steps{e}{e'}$ means that the expression $e$ steps to $e'$.
+Since this judgement may be applied to terms with free variables, $e'$ may not be a value, but could instead be a neutral form \todo{value and neutral form use without def. maybe introduce syntactic categories for them and then have the stepping rule have a value output?}.
+
+\begin{figure}[h]
+  \fbox{$\checkJ{\Gamma}{e}{n_t}$} \\
+  \fbox{$\synthJ{\Gamma}{e}{n_t}$}
+  \begin{mathpar}
+    \inferrule*[left=Var]
+    { (x : n) \in \Gamma
+    }
+    { \synthJ{\Gamma}{x}{n}
+    }
+
+    \inferrule*[left=Conv]
+    { \synthJ{\Gamma}{e}{n_t} \\
+      \tyEqJ{\Gamma}{n_t}{n_s}{\univE}
+    }
+    { \checkJ{\Gamma}{e}{n_s}
+    }
+
+    \inferrule*[left=Ann]
+    { \checkJ{\Gamma}{e_t}{\univE} \\
+      \steps{e_t}{n_t} \\
+      \checkJ{\Gamma}{e}{n_t}
+    }
+    { \synthJ{\Gamma}{\annE{e}{e_t}}{e_t}
+    }
+
+    \inferrule*[left=$\Pi$-I]
+    { \freshJ{\Gamma}{z} \\
+      \steps{\subst{e_c}{y}{z}}{n_c} \\
+      \checkJ{\Gamma, z : n_d}{\subst{e}{x}{z}}{n_c}
+    }
+    { \checkJ{\Gamma}{\lamE{x}{e}}{\piE{y}{n_d}{e_c}}
+    }
+    \todo{Does z really need to be fresh here?}
+
+    \inferrule*[left=$\Pi$-E]
+    { \synthJ{\Gamma}{e_f}{\piE{x}{n_d}{e_c}} \\
+      \checkJ{\Gamma}{e_a}{n_d} \\
+      \steps{\subst{e_c}{x}{e_a}}{n_c}
+    }
+    { \synthJ{\Gamma}{\appE{e_f}{e_a}}{n_c}
+    }
+
+    \inferrule*[left=$\Pi$-T]
+    { \checkJ{\Gamma}{e_d}{\univE} \\
+      \checkJ{\Gamma, x : e_d}{e_c}{\univE}
+    }
+    { \checkJ{\Gamma}{\piE{x}{e_d}{e_c}}{\univE}
+    }
+
+    \inferrule*[left=$\univE$-in-$\univE$]
+    {
+    }
+    { \checkJ{\Gamma}{\univE}{\univE}
+    }
+  \end{mathpar}
+  \caption{Typing Rules}
+  \label{fig:base-typing-rules}
+\end{figure}
+
+Finally, we present the typing rules for the theory in a bidirectional style \citep{dunfield2019}.
+The judgment $\checkJ{\Gamma}{e}{e_t}$ means that the term $e$ checks against the type $e_t$ under the context $\Gamma$.
+It is formulated such that it can be decided when given concrete terms for $\Gamma$, $e$, and $e_t$.
+The judgment $\synthJ{\Gamma}{e}{e_t}$ means that the type $e_t$ can be inferred for the term $e$ under the context $\Gamma$.
+It is formulated such that given the concrete terms for $\Gamma$ and $e$, it can be decided if there exists an $e_t$ such that the judgment holds.
+
+The Conv \todo{add label and reference for Conv} rule uses the typed equality judgment $\tyEqJ{\Gamma}{e_a}{e_b}{e_t}$ which we deliberately haven't defined yet.
+In the next two subsections we will present two different versions of this judgment.
+
+\subsection{Syntax Directed Equality}
+
+\begin{figure}[h]
+  \begin{displaymath}
+    \begin{array}{lrcll}
+      \text{Scope} & \Theta & \bnfdef & \cdot & \\
+      & & \bnfalt & \Theta, x & \\
+    \end{array}
+  \end{displaymath}
+  \fbox{$\tyEqJ{\Gamma}{n_a}{n_b}{n_t}$} \\\\
+  \fbox{$\stxEqJ{\Theta}{n_a}{n_b}$} \\\\
+  $\text{strip-types} : \Gamma \to \Theta$ \\
+  \begin{mathpar}
+    \inferrule*[left=Syn]
+    { \stxEqJ{\text{strip-types}(\Gamma)}{n_a}{n_b}
+    }
+    { \tyEqJ{\Gamma}{n_a}{n_b}{n_t}
+    }
+
+    \inferrule*[left=$\eta$-L]
+    { \freshJ{\Theta}{y} \\
+      \steps{\appE{(\lamE{x}{e_b})}{y}}{n_b} \\
+      \steps{\appE{n}{y}}{n_a} \\
+      \stxEqJ{\Theta, y}{n_b}{n_a}
+    }
+    { \stxEqJ{\Theta}{\lamE{x}{e_b}}{n}
+    }
+
+    \inferrule*[left=$\eta$-R]
+    { \freshJ{\Theta}{y} \\
+      \steps{\appE{(\lamE{x}{e_b})}{y}}{n_b} \\
+      \steps{\appE{n}{y}}{n_a} \\
+      \stxEqJ{\Theta, y}{n_b}{n_a}
+    }
+    { \stxEqJ{\Theta}{n}{\lamE{x}{e_b}}
+    }
+
+    \inferrule*[left=$\Pi{=}$]
+    { \stxEqJ{\Theta}{n_d}{n_d'} \\
+      \freshJ{\Theta}{y} \\
+      \steps{\subst{e_c}{x}{y}}{n_c} \\
+      \steps{\subst{e_c'}{x'}{y}}{n_c'} \\
+      \stxEqJ{\Theta, y}{n_c}{n_c'}
+    }
+    { \stxEqJ{\Theta}{\piE{x}{n_d}{e_c}}{\piE{x'}{n_d'}{e_c'}}
+    }
+
+    \inferrule*[left=$\univE{=}$]
+    {
+    }
+    { \stxEqJ{\Theta}{\univE}{\univE}
+    }
+
+    \inferrule*[left=Var${=}$]
+    {
+    }
+    { \stxEqJ{\Theta}{x}{x}
+    }
+
+    \inferrule*[left=App${=}$]
+    { \stxEqJ{\Theta}{\nu_f}{\nu_f'} \\
+      \stxEqJ{\Theta}{n_a}{n_a'}
+    }
+    { \stxEqJ{\Theta}{\appE{\nu_f}{n_a}}{\appE{\nu_f'}{n_a'}}
+    }
+  \end{mathpar}
+  \caption{Syntax Directed Equality}
+  \label{fig:base-syntax-directed-equality}
+\end{figure}
+
+\subsection{Type Directed Equality}
+
+\begin{figure}[h]
+  \fbox{$\tyEqJ{\Gamma}{n_a}{n_b}{n_t}$} \\\\
+  \fbox{$\chkEqJ{\Gamma}{n_a}{n_b}{n_t}$} \\\\
+  \fbox{$\synEqJ{\Gamma}{n_a}{n_b}{n_t}$} \\\\
+
+  \begin{mathpar}
+    \inferrule*
+    { \chkEqJ{\Gamma}{n_a}{n_b}{n_t}
+    }
+    { \tyEqJ{\Gamma}{n_a}{n_b}{n_t}
+    }
+
+    \inferrule*[left=$\eta$]
+    { \freshJ{\Gamma}{y} \\
+      \steps{\appE{n_a}{y}}{n_a'} \\
+      \steps{\appE{n_b}{y}}{n_b'} \\
+      \steps{\subst{e_c}{x}{y}}{n_c} \\
+      \chkEqJ{\Gamma, y : n_d}{n_a'}{n_b'}{n_c}
+    }
+    { \chkEqJ{\Gamma}{n_a}{n_b}{\piE{x}{n_d}{e_c}}
+    }
+
+    \inferrule*[left=$\Pi{=}$]
+    { \chkEqJ{\Gamma}{n_d}{n_d'}{\univE} \\
+      \freshJ{\Gamma}{y} \\
+      \steps{\subst{e_c}{x}{y}}{n_c} \\
+      \steps{\subst{e_c'}{x'}{y}}{n_c'} \\
+      \chkEqJ{\Gamma}{n_c}{n_c'}{\univE}
+    }
+    { \chkEqJ{\Gamma}{\piE{x}{n_d}{e_c}}{\piE{x'}{n_d'}{e_c'}}{\univE}
+    }
+
+    \inferrule*[left=$\univE{=}$]
+    {
+    }
+    { \chkEqJ{\Gamma}{\univE}{\univE}{\univE}
+    }
+
+    \inferrule*[left=Conv${=}$]
+    { \synEqJ{\Gamma}{n_a}{n_b}{n_t'}
+    }
+    { \chkEqJ{\Gamma}{n_a}{n_b}{n_t}
+    }
+
+    \inferrule*[left=Var${=}$]
+    { (x : n_t) \in \Gamma
+    }
+    { \synEqJ{\Gamma}{x}{x}{n_t}
+    }
+
+    \inferrule*[left=App${=}$]
+    { \synEqJ{\Gamma}{\nu_f}{\nu_f'}{\piE{x}{n_d}{e_c}} \\
+      \chkEqJ{\Gamma}{n_a}{n_a'}{n_d} \\
+      \steps{\subst{e_c}{x}{n_a}}{n_c}
+    }
+    { \synEqJ{\Gamma}{\appE{\nu_f}{n_a}}{\appE{\nu_f'}{n_a'}}{n_c}
+    }
+  \end{mathpar}
+  \caption{Type Directed Equality}
+  \label{fig:base-type-directed-equality}
+\end{figure}
+
+\subsection{Unit and Dependent Pair Types}
+
+\begin{figure}[h]
+  \begin{displaymath}
+    \begin{array}{lrcll}
+      \text{Expressions} & e & \bnfdef & ... & \\
+      & & \bnfalt & \pairE{e_f}{e_s} & \\
+      & & \bnfalt & \fstE{e} & \\
+      & & \bnfalt & \sndE{e} & \\
+      & & \bnfalt & \sigmaE{x}{e_f}{e_s} & \\
+      & & \bnfalt & \unitE & \\
+      & & \bnfalt & \unittE & \\
+      \\
+      \text{Normal Forms} & n & \bnfdef & ... & \\
+      & & \bnfalt & \pairE{n_f}{n_s} & \\
+      & & \bnfalt & \sigmaE{x}{n_f}{e_s} & \\
+      & & \bnfalt & \unitE & \\
+      & & \bnfalt & \unittE & \\
+      \\
+      \text{Neutral Terms} & \nu & \bnfdef & ... & \\
+      & & \bnfalt & \fstE{\nu} & \\
+      & & \bnfalt & \sndE{\nu} & \\
+    \end{array}
+  \end{displaymath}
+  \caption{Unit and Dependent Pair Syntax}
+  \label{fig:unit-dependent-pair-syntax}
+\end{figure}
+\begin{figure}
+  \begin{mathpar}
+    \inferrule*[left=$\Sigma$-I$\Downarrow$]
+    { \steps{e_f}{n_f} \\
+      \steps{e_s}{n_s} \\
+    }
+    { \steps{\pairE{e_f}{e_s}}{\pairE{n_f}{n_s}}
+    }
+
+    \inferrule*[left=$\sigma_1$]
+    { \steps{e}{\pairE{n_f}{n_s}} \\
+    }
+    { \steps{\fstE{e}}{n_f}
+    }
+
+    \inferrule*[left=$\sigma_2$]
+    { \steps{e}{\pairE{n_f}{n_s}} \\
+    }
+    { \steps{\sndE{e}}{n_s}
+    }
+
+    \inferrule*[left=$\sigma$-I1$\Downarrow$]
+    { \steps{e}{\nu}
+    }
+    { \steps{\fstE{e}}{\fstE{\nu}}
+    }
+
+    \inferrule*[left=$\sigma$-I2$\Downarrow$]
+    { \steps{e}{\nu}
+    }
+    { \steps{\sndE{e}}{\sndE{\nu}}
+    }
+
+    \inferrule*[left=$\sigma$-T$\Downarrow$]
+    { \steps{e_1}{n_1}
+    }
+    { \steps{\sigmaE{x}{e_1}{e_2}}{\sigmaE{x}{n_1}{e_2}}
+    }
+
+    \inferrule*[left=$\unittE$-I$\Downarrow$]
+    {
+    }
+    { \steps{\unitE}{\unitE}
+    }
+
+    \inferrule*[left=$\unittE$-T$\Downarrow$]
+    {
+    }
+    { \steps{\unittE}{\unittE}
+    }
+  \end{mathpar}
+  \caption{Unit and Dependent Pair Semantics}
+  \label{fig:unit-dependent-pair-semantics}
+\end{figure}
+\begin{figure}
+  \begin{mathpar}
+    \inferrule*[left=$\Sigma$-I]
+    { \checkJ{\Gamma}{e_f}{n_1} \\
+      \steps{\subst{e_2}{x}{e_s}}{n_2} \\
+      \checkJ{\Gamma}{e_s}{n_2}
+    }
+    { \checkJ{\Gamma}{\pairE{e_f}{e_s}}{\sigmaE{x}{n_1}{e_2}}
+    }
+
+    \inferrule*[left=$\Sigma$-E1]
+    { \synthJ{\Gamma}{e}{\sigmaE{x}{n_1}{e_2}} \\
+    }
+    { \synthJ{\Gamma}{\fstE{e}}{n_1}
+    }
+
+    \inferrule*[left=$\Sigma$-E2]
+    { \synthJ{\Gamma}{e}{\sigmaE{x}{n_1}{e_2}} \\
+      \steps{\subst{e_2}{x}{\fstE{e}}}{n_2}
+    }
+    { \synthJ{\Gamma}{\sndE{e}}{n_2}
+    }
+
+    \inferrule*[left=$\Sigma$-T]
+    { \checkJ{\Gamma}{e_1}{\univE} \\
+      \steps{e_1}{n_1} \\
+      \checkJ{\Gamma, x : n_1}{e_2}{\univE} \\
+    }
+    { \checkJ{\Gamma}{\sigmaE{x}{e_1}{e_2}}{\univE}
+    }
+
+    \inferrule*[left=$\unittE$-I]
+    {
+    }
+    { \checkJ{\Gamma}{\unitE}{\unittE}
+    }
+
+    \inferrule*[left=$\unittE$-T]
+    {
+    }
+    { \checkJ{\Gamma}{\unittE}{\univE}
+    }
+  \end{mathpar}
+  \caption{Unit and Dependent Pair Typing}
+  \label{fig:unit-dependent-pair-typing}
+\end{figure}
+\begin{figure}
+  \begin{mathpar}
+    \inferrule*[left=$\Sigma$-IL${=}$]
+    { \steps{\fstE{n}}{n_f'} \\
+      \steps{\sndE{n}}{n_s'} \\
+      \stxEqJ{\Theta}{n_f}{n_f'} \\
+      \stxEqJ{\Theta}{n_s}{n_s'}
+    }
+    { \stxEqJ{\Theta}{\pairE{n_f}{n_s}}{n}
+    }
+
+    \inferrule*[left=$\Sigma$-IR${=}$]
+    { \steps{\fstE{n}}{n_f'} \\
+      \steps{\sndE{n}}{n_s'} \\
+      \stxEqJ{\Theta}{n_f}{n_f'} \\
+      \stxEqJ{\Theta}{n_s}{n_s'}
+    }
+    { \stxEqJ{\Theta}{n}{\pairE{n_f}{n_s}}
+    }
+
+    \inferrule*[left=$\Sigma$-T${=}$]
+    { \stxEqJ{\Theta}{n_1}{n_1'} \\
+      \freshJ{\Theta}{y} \\
+      \steps{\subst{e_2}{x}{y}}{n_2} \\
+      \steps{\subst{e_2'}{x'}{y}}{n_2'} \\
+      \stxEqJ{\Theta}{n_2}{n_2'}
+    }
+    { \stxEqJ{\Theta}{\sigmaE{x}{n_1}{e_2}}{\sigmaE{x'}{n_1'}{e_2'}}
+    }
+
+    \inferrule*[left=$\Sigma$-E1${=}$]
+    { \stxEqJ{\Theta}{\nu}{\nu'}
+    }
+    { \stxEqJ{\Theta}{\fstE{\nu}}{\fstE{\nu'}}
+    }
+
+    \inferrule*[left=$\Sigma$-E2${=}$]
+    { \stxEqJ{\Theta}{\nu}{\nu'}
+    }
+    { \stxEqJ{\Theta}{\sndE{\nu}}{\sndE{\nu'}}
+    }
+
+    \inferrule*[left=$\unittE$-I${=}$]
+    {
+    }
+    { \stxEqJ{\Theta}{\unitE}{\unitE}
+    }
+
+    \inferrule*[left=$\unittE$-T${=}$]
+    {
+    }
+    { \stxEqJ{\Theta}{\unittE}{\unittE}
+    }
+  \end{mathpar}
+  \caption{Unit and Dependent Syntax Directed Equality}
+  \label{fig:unit-dependent-pair-syntax-directed-equality}
+\end{figure}
+\begin{figure}
+  \begin{mathpar}
+    \inferrule*[left=$\Sigma$-I${=}$]
+    { \steps{\fstE{n}}{n_f} \\
+      \steps{\fstE{n'}}{n_f'} \\
+      \chkEqJ{\Gamma}{n_f}{n_f'}{n_1} \\
+      \steps{\subst{e_2}{x}{n_f}}{n_2} \\
+      \steps{\sndE{n}}{n_s} \\
+      \steps{\sndE{n'}}{n_s'} \\
+      \chkEqJ{\Gamma}{n_s}{n_s'}{n_2}
+    }
+    { \chkEqJ{\Gamma}{n}{n'}{\sigmaE{x}{n_1}{e_2}}
+    }
+
+    \inferrule*[left=$\Sigma$-T${=}$]
+    { \chkEqJ{\Theta}{n_1}{n_1'}{\univE} \\
+      \freshJ{\Theta}{y} \\
+      \steps{\subst{e_2}{x}{y}}{n_2} \\
+      \steps{\subst{e_2'}{x'}{y}}{n_2'} \\
+      \chkEqJ{\Theta}{n_2}{n_2'}{\univE}
+    }
+    { \chkEqJ{\Theta}{\sigmaE{x}{n_1}{e_2}}{\sigmaE{x'}{n_1'}{e_2'}}{\univE}
+    }
+
+    \inferrule*[left=$\Sigma$-E1${=}$]
+    { \synEqJ{\Theta}{\nu}{\nu'}{\sigmaE{x}{n_1}{e_2}}
+    }
+    { \synEqJ{\Theta}{\fstE{\nu}}{\fstE{\nu'}}{n_1}
+    }
+
+    \inferrule*[left=$\Sigma$-E2${=}$]
+    { \synEqJ{\Theta}{\nu}{\nu'}{\sigmaE{x}{n_1}{e_2}} \\
+      \steps{\subst{e_2}{x}{\fstE{\nu}}}{n_2}
+    }
+    { \synEqJ{\Theta}{\sndE{\nu}}{\sndE{\nu'}}{n_2}
+    }
+
+    \inferrule*[left=$\unittE$-I${=}$]
+    {
+    }
+    { \chkEqJ{\Gamma}{n}{n'}{\unittE}
+    }
+
+    \inferrule*[left=$\unittE$-T${=}$]
+    {
+    }
+    { \chkEqJ{\Gamma}{\unittE}{\unittE}{\univE}
+    }
+  \end{mathpar}
+  \caption{Unit and Dependent Type Directed Equality}
+  \label{fig:unit-dependent-pair-type-directed-equality}
+\end{figure}
+
+\section{Methods}
+
+\subsection{\textit{smalltt} Implementation}
+
+\begin{quote}
+\textit{Disclaimer}: smalltt includes metavariables for inferring parts of the program.
+This means that the code for deciding judgmental equality must also implement unification for solving these metavariables.
+Since this is a separate concern from the method for deciding judgmental equality, the code presented here will omit the cases where metavariables must be dealt with.
+\end{quote}
+
+To evaluate the performance and utility of Chapman et al.'s recipe for deciding judgmental equality, I have produced two modified versions of Kovac's smalltt, a type checker for a small dependently typed language with a focus on type checking performance.
+The first version has the same syntax and semantics of the original smalltt, but uses Chapman et al.'s recipe to decide judgmental equality.
+The goal of this version is to evaluate the performance of the recipe as compared to the original smalltt type checker.
+The second version extends the first modification with the unit and dependent pair types, with the goal of evaluating the ease of adding new constructs to the language by following the recipe.
+
+\subsubsection{Rewriting \textit{smalltt}}
+
+The existing smalltt implementation decides syntactic equality in two phases.
+The first phase is exactly the same as our desired first phase, where $\beta$ rules are applied in a purely syntax driven manner by the \lstinline{eval} function.
+
+\begin{lstlisting}
+eval :: Env -> Tm -> Val
+
+data Tm
+  = LocalVar Ix
+  | TopVar Lvl Val
+  | Let Span Tm Tm Tm
+  | App Tm Tm Icit
+  | Lam NameIcit Tm
+  | Pi NameIcit Ty Ty
+  | U
+
+type Ty = Tm
+
+type Ix = Int
+
+type Lvl = Int
+
+data Val =
+    VLocalVar Lvl Spine
+  | VTopVar Lvl Spine Val
+  | VLam Closure
+  | VPi VTy Closure
+  | VU
+
+type VTy = Val
+
+data Spine =
+    SId
+  | SApp Spine Val Icit
+
+data Closure = Closure Env Tm
+
+data Env =
+    ENil
+  | EDef Env Val
+\end{lstlisting}
+
+The input \lstinline{Tm} type represents a well typed expression where all of the local variables have been replaced with deBruijn indices, and the global variables with deBruijn levels \footnote{deBruijn indices replace variables with the number of binders between them and their binding site, e.g. $\lambda x. \lambda y. x$ becomes $\lambda. \lambda. 1$. Whereas deBruijn levels do the same, but number the binding sites starting at the outermost binding, e.g. $\lambda x. \lambda y. x$ becomes $\lambda. \lambda. 0$}.
+\lstinline{Val}, the output of \lstinline{eval}, is a datatype representing an expression in $\beta$-normal form with both local global variables represented as deBruijn levels.
+Since there's no need to modify this part of the code, I won't discuss the implementation of the \lstinline{eval} function.
+The standard reference for this algorithm is \citet{Coquand1996}.
+
+The second phase is where the bulk of the changes lie.
+The original functions implementing this phase were approximately the following.
+
+\begin{lstlisting}
+unify :: Lvl -> Val -> Val -> IO ()
+
+unifySp :: Lvl -> Spine -> Spine -> IO ()
+\end{lstlisting}
+
+These check syntactic equality on values and spines, respectively, with $\eta$-rules for functions also being applied.
+They take the current deBruijn level as an additional parameter for when a new local variable needs to be introduced.
+If the values are equal, they will complete succesfully with a value of \lstinline{()}.
+Otherwise, they will throw an exception.
+
+In line with the method presented in \citet{Chapman2005}, these functions were re-written as the following.
+
+\begin{lstlisting}
+unifyTy :: Cxt -> VTy -> VTy -> IO ()
+
+unifyChk :: Cxt -> Val -> Val -> VTy -> IO ()
+
+unifySp :: Cxt -> VTy -> Spine -> Spine -> IO VTy
+
+type TypeCxt = Map Lvl VTy
+
+type Cxt = Cxt {lvl :: Lvl, localTypes :: TypeCxt, globalTypes :: TypeCxt}
+\end{lstlisting}
+
+Here the \lstinline{unify} function has been split into two parts, one for checking judgmental equality between types, and one for checking it between terms at a specific type.
+However, since we have the impredicative type-in-type, we can uniquely determine \lstinline{unifyTy} by the following equation.
+
+\begin{lstlisting}
+unifyTy cxt a b = unifyChk cxt a b VU
+\end{lstlisting}
+
+Here, the only $\eta$ rule we have to apply is the the rule for dependent functions which takes the following form.
+
+\begin{mathpar}
+\inferrule*[left={$x$ fresh}]
+  {\tyEqJ{\Gamma, x : D}{\appE{f}{x}}{\appE{g}{x}}{\subst{C}{y}{x}}}
+  {\tyEqJ{\Gamma}{f}{g}{\piE{y}{D}{C}}}
+\end{mathpar}
+
+To handle it we add the following equation for \lstinline{unifyChk}
+
+\begin{lstlisting}
+unifyChk cxt f g (VPi d c) = unifyChk cxt' (doApp f x) (doApp g x) (appCl c x)
+  where (cxt', x) = cxtNewLocal d cxt
+\end{lstlisting}
+
+Here we use two new helpers, \lstinline{doApp} which applies the first argument to the second and $\beta$-reduces if necessary, and \lstinline{appCl} which substitutes its second argument into the body of its first.
+
+\begin{lstlisting}
+doApp :: Val -> Val -> Val
+
+appCl :: Closure -> Val -> Val
+\end{lstlisting}
+
+Next we have the equations for the constructors of types which either don't have $\eta$-rules, or don't have decidable $\eta$-rules.
+In our case this is the type of types.
+
+\begin{lstlisting}
+unifyChk cxt (VPi d c) (VPi d' c') VU = unifyChk cxt d d' VU >> unifyChk cxt' (appCl c x) (appCl' c' x) VU
+  where (cxt', x) = cxtNewLocal d cxt
+
+unifyChk cxt VU VU VU = return ()
+\end{lstlisting}
+
+The last chance our two values have to be equal is if they are a variables with a spine.
+
+\begin{lstlisting}
+unifyChk cxt (VLocalVar x sp) (VLocalVar x' sp') _
+  | x == x' = unifySp cxt sp sp' >> return ()
+  | otherwise = throw (UnifyEx Conversion)
+
+unifyChk cxt (VTopVar _ _ v) (VTopVar _ _ v') t = unifyChk cxt v v' t
+\end{lstlisting}
+
+Additionally, the \lstinline{unifySp} function not only needs to check two spines for equality, but also return their type if they are equal.
+Since the spines themselves don't contain the variable being applied, 
+
+\subsubsection{Extending \textit{smalltt}}
+
+To extend version of smalltt presented in section 4.1 with the unit and dependent pair types, I first modified the syntax of both terms and values.
+
+\begin{lstlisting}
+data Tm
+  = ...
+  | Sigma NameIcit Ty Ty
+  | SigmaI Tm Tm
+  | Fst Tm
+  | Snd Tm
+  | Unit
+  | UnitI
+\end{lstlisting}
+
+
+\subsection{Data Analysis}
+
+\subsubsection{The Problem}
+
+Programs don't have deterministic runtimes, but their runtimes aren't completely random either.
+We can model each run of a program as being drawn from some probability distribution, and so benchmarking a program can be viewed as sampling that program's runtime distribution.
+
+In the case considered here, where we want to know if the runtime of the modified type checker performs as well as the original, the question becomes ``is the mean of the runtime distribution of the modified type checker greater than that of the original program?".
+To answer this question, we can only use the runtime sample for each implementation collected during benchmarking.
+But, this begs the question, how can we use these samples to answer the question?
+And how large should the samples be?
+
+\subsubsection{Welch's T-Test}
+
+There are a few different methods I could use to compare the runtime distribution means of each implementation, the most popular probably being Student's t-test.
+This test would let me estimate the probability that we get the observed benchmarking results given that the runtime distribution mean of the modified type checker \textit{isn't} larger that the original.
+If the probability is low, then we can say that it is likely that the modified type checker is slower than the original.
+
+However, Student's t-test also assumes both that the variance in distribution of sample means for both type checkers are the same, and that they are normally distributed.
+The later is not an unreasonable assumption.
+The central limit theorem tells us that the distribution of sample means approaches a normal distribution as sample size increases.
+However, I have no reason to assume that the variances are equal, and so the first assumption is unreasonable.
+Therefore I use a generalization of Student's t-test called Welch's t-test which does not make this assumption \citep{Welch1947}.
+
+\newpage
+
+\subsubsection{Sample Size, Power, and Effect Size}
+
+To determine what sample size to use, I need to decide on how powerful to make my statistical test.
+In this case, the power is the probability of deciding that the modified type checker is slower given that it actually is.
+This also determines the probability of deciding that the modified type checker isn't slower even when it is, a situation I'd like to avoid.
+Therefore I set the power far higher than the standard $0.8$, setting it at $0.99$, giving myself a 1\% chance of a false positive.
+I also set my significance level, the probability of deciding that the modified type checker is slower when it isn't, to the similar value of $0.01$.
+Additionally I set the minimum detectable effect size to $0.5$, meaning that the runtime distributions must differ by at least $0.5$ standard deviations for me to detect a difference between them.
+
+To achieve these values, the G*Power tool \citep{Faul2009} calculates that I need to run each benchmark 175 times per implementation.
+
+\subsubsection{Method}
+To collect the samples, I ran each smalltt benchmark 175 times using the hyperfine \footnote{\url{https://github.com/sharkdp/hyperfine}} tool.
+These benchmarks were run on a Intel Skylake Xeon running at 2.5GHz with 120G of ram.
+I then analyzed the collected data using the statistics Haskell library \footnote{\url{https://hackage.haskell.org/package/statistics}}.
+
+
+\section{Results}
+
+\section{Conclusion}
+
+\newpage
+
+\printbibliography
+
+\todos
+
+\end{document}
