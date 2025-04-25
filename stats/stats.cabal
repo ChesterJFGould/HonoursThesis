@@ -37,6 +37,7 @@ library
       aeson >=2.2.3.0 && <3
     , base >=4.7 && <5
     , statistics >=0.16.3.0 && <1
+    , vector >=0.10 && <1
   default-language: Haskell2010
 
 executable stats-exe
@@ -53,7 +54,7 @@ executable stats-exe
     , base >=4.7 && <5
     , statistics >=0.16.3.0 && <1
     , stats
-    , vector >= 0.10 && < 1
+    , vector >=0.10 && <1
   default-language: Haskell2010
 
 test-suite stats-test
@@ -71,4 +72,5 @@ test-suite stats-test
     , base >=4.7 && <5
     , statistics >=0.16.3.0 && <1
     , stats
+    , vector >=0.10 && <1
   default-language: Haskell2010
