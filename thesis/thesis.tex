@@ -59,7 +59,7 @@
 \newcommand{\sigmaE}[3]{\Sigma #1 : #2. \text{ } #3}
 \newcommand{\unitE}{\langle \rangle}
 \newcommand{\unittE}{\text{Unit}}
-\newcommand{\univE}{\text{U}}
+\newcommand{\univE}{\text{Type}}
 \newcommand{\annE}[2]{#1 : #2}
 
 \newcommand{\checkJ}[3]{#1 \vdash #2 \Leftarrow #3}
@@ -82,15 +82,17 @@
 \section{Introduction}
 
 \todo{Overall: Apply feedback given by William}
+\todo{Overall: Check using we instead of I}
+\todo{Overall: Type-directed instead of type directed, same for syntax-directed}
 \subsection{Proof Assistants}
-\todo{This section is good, just change to be about thesis not proposal}
+\done\todo{This section is good, just change to be about thesis not proposal}
 
 As \citet{Dijkstra1988} argues, formal methods form a critical part of computer programming.
 The digital nature of the computer means that even a slight error in a program results not in a slight error in output, but entirely unexpected output.
 Formal proof forces the programmer to reason through why he believes his program will do what he intends, and using a proof assistant forces this reasoning to be thorough enough that each step can be justified by some formal system.
 
-The family of proof assistants under consideration of this proposal are those based on a dependent type theory (e.g. Agda, Coq, Lean).
-These systems have an advantage over others, as the programs and proof about these programs are written in a common language \citep{Nordstrom1990}.
+The family of proof assistants under consideration of this thesis are those based on a dependent type theory (e.g. Agda, Coq, Lean).
+These systems have an advantage over others, as the programs and proofs about these programs are written in a common language \citep{Nordstrom1990}.
 
 For any proof assistant, there is a problem akin to ``Who watches the watchmen?", how does one know that the proof checker is itself correct?
 As a solution to this problem, \citet{Barendregt2005} propose that proof assistants should admit the checking of a proof by a small, independent program (commonly referred to as the ``de Bruijn criterion").
@@ -104,7 +106,9 @@ Accepting this, one might then ask if a dependently typed proof assistant could 
 To assess this, we must first know what it takes to check a proof in a dependent type theory, and even more basically, what a dependent type theory is.
 
 \subsection{Dependent Types}
-\todo{This section is good, just change to be about thesis not proposal}
+\label{sec:dependent-types}
+\done\todo{This section is good, just change to be about thesis not proposal}
+\todo{Add example here where type checking depends on unit eta}
 
 Just as functional languages treat functions as first class values, dependently typed languages treat types as first class values.
 An example is the following program, 
@@ -133,21 +137,73 @@ Two expressions or types are equal if they can be ``run" to the same value.
 
 In fact, we had already seen this in the definition of \verb|int_or_string|.
 One of the judgements of the formal system underlying dependent type theory is the typing judgement taking the form $\Gamma \vdash e : A$, meaning expression $e$ has type $A$ with free variables contained in $\Gamma$.
-So in the true branch of \verb|int_or_string| we make the judgement $b : \verb|Bool| \vdash 3141 : (\verb|if true then Int else String|)$, and since we are reasoning up to symbolic execution this reduces to $b : \verb|Bool| \vdash 3141 : \verb|Int|$.
+So in the true branch of \verb|int_or_string| we make the judgement $b : \verb|Bool| \vdash 3141 : (\verb|if true then Int else String|)$, and since we are reasoning up to symbolic execution this is equal to to $b : \verb|Bool| \vdash 3141 : \verb|Int|$.
 
 This ``reasoning up to symbolic execution" is formalized using the second judgement of dependent type theory, the equality judgement.
 This takes the form $\Gamma \vdash a = b : A$, meaning $a$ is judgementally equal to $b$ at type $A$ with free variables $\Gamma$.
 The two judgements then interact with each other with the following deduction rule
 
 \begin{mathpar}
-  \inferrule*[left=(Conv)]{\Gamma \vdash e : B \\ \Gamma \vdash A = B : \texttt{Type}}{\Gamma \vdash e : A}
+  \inferrule*[left=Conv]{\Gamma \vdash e : B \\ \Gamma \vdash A = B : \texttt{Type}}{\Gamma \vdash e : A}
 \end{mathpar}
 
 Which states that an expression $e$ of type $B$ can also be considered of type $A$ so long as $A$ and $B$ are judgementally equal types.
 
+We've already seen two instances of this equality judgment at play in the \verb|int_or_string| and \verb|int_or_string_theorem| example.
+
+\begin{mathpar}
+  \inferrule*[left=App-$\beta$]
+    {
+    }
+    {\Gamma \vdash (\text{\textbackslash} x \to b) a = \subst{b}{x}{a} : A
+    }
+
+  \inferrule*[left=if-true-$\beta$]
+    {
+    }
+    {\Gamma \vdash \text{if true then } a \text{ else } b = a : A
+    }
+\end{mathpar}
+
+App-$\beta$ is the familiar lambda calculus $\beta$ rule, where a function literal applied to an argument is equal to the body of the function with the argument substituted for the parameter variable.
+This rule was used when type checking \verb|int_or_string_theorem| to judge that \verb|int_or_string(true)| is equal to \verb|if true then 3141 else "Hello, World!"|.
+The other rule, if-true-$\beta$, was then used to judge that \verb|if true then 3141 else "Hello, World!"| is equal to \verb|3141|.
+Since both these rules capture the execution of a program, we group them together and call them both $\beta$ rules.
+We then call an expression which looks like the left-hand side of a $\beta$ rule a ``redex", for reducible expression.
+
+There is, however, another group of rules called $\eta$ rules.
+Instead of capturing the execution of a program, give us additional equalities that we can glean from the type of a term.
+
+\begin{mathpar}
+  \inferrule*[left=Fun-$\eta$]
+  { \Gamma, x : A \vdash f x = g x : B
+  }
+  { \Gamma \vdash f = g : (x : A) \to B
+  }
+
+  \inferrule*[left=Unit-$\eta$]
+  {
+  }
+  { \Gamma \vdash a = b : \text{Unit}
+  }
+\end{mathpar}
+
+
+The most familiar of these is the Fun-$\eta$ rule, which gives us the function extensionality principle for terms of a function type.
+Another is the Unit-$\eta$ rule for the Unit type which has the single element $\unitE$.
+Since there is only one element of the Unit type, we can judge all expressions of Unit type equal.
+This rule lets us type check the following program.
+
+\begin{verbatim}
+unit_contractible : (x : Unit) -> (y : Unit) -> x = y
+unit_contractible x y = reflexivity
+\end{verbatim}
+
+The main part of this thesis will be comparing two systems, one of which supports this Unit-$\eta$ rule and one which doesn't.
+
 \subsection{Implementation}
 
-\todo{seems good?}
+\done\todo{seems good?}
 
 So, the two main components of a proof checker for a dependent type theory are the algorithms for deciding the typing and equality judgements.
 Therefore if our proof assistant based on this theory is to satisfy the de Bruijn criterion there must be simple, efficient algorithms for deciding these judgements.
@@ -156,10 +212,10 @@ When writing code which decides if a judgement is provable for the subjects of t
 For example, in a language with complete type inference (e.g. Haskell, OCaml), the type in the typing judgement is always treated as output while the context and expression are input.
 
 \subsubsection{Typing Judgement}
-\todo{seems good?}
+\done\todo{seems good?}
 
 The Pfenning bidirectional type checking recipe \citep{Dunfield2021} provides a simple algorithm for deciding the typing judgement by carefully choosing when to switch between the input and output modes.
-This recipe splits the operators in the language into two camps, constructors which build an element of a specific type and whose typing rule takes the type as input, and destructors which perform some operation on elements of a specific type and produce their type as output.
+This recipe splits the operators in the language into two camps, constructors which build an element of a specific type and whose typing rule takes the type as input, and destructors which perform some operation on elements of a specific type and whose typing rule produce their type as output.
 In the example code given above, \verb|\b -> ...|, \verb|3141|, and \verb|"Hello, World!"| are constructors while the \verb|if| operator is a destructor.
 Following this recipe makes the code deciding the typing judgement very regular, making it both simple to read and simple to write.
 Additionally, the algorithm performs a single traversal of the syntax tree, making it reasonably efficient.
@@ -197,17 +253,16 @@ An algorithm for deciding judgemental equality should also provide a systematic 
 
 \todo{Update to be inline with thesis instead of proposal}
 
-Another problem with NbE interpreters, is that there are different design decisions they can make, without a clear picture as to the tradeoffs being made.
+Another problem with NbE interpreters, if and how they can handle ``type-directed" rules.
 
 When comparing two terms for judgemental equality, after the terms are normalized, most judgemental equality rules can be decided by simply comparing the syntax of the two terms.
 There are some rules, however, where it is necessary to inspect the type of the two terms to decide if they are equal.
-These rules are called are called ``type-directed" rules.
-One of the design decisions alluded to above is how to handle these sorts of rules.
+One example is the Unit-$\eta$ rule shown at the end of \autoref{sec:dependent-types}.
 
 The algorithm described by \citet{Coquand1996} takes the easy way out and excludes these rules from the theory, resulting in a weaker, syntax-directed, judgemental equality.
-Unfortunately, this approach does not generalize as there are theories, such as Observational Type Theory \citep{Altenkirch2007}, which require type-directed rules.
+However, doing so puts the burden of proof on the user of the theory when a type-directed rule is required for a program to type check.
 
-\citet{Chapman2005} describes an algorithm which supports type-directed rules by giving the type of the two normalized terms as a argument to the procedure deciding their equality.
+\citet{Chapman2005} describe an algorithm which supports type-directed rules by giving the type of the two normalized terms as a argument to the procedure deciding their equality.
 The procedure can then inspect the type when it comes across a situation in which a type-directed rule is applicable.
 Another approach is documented by Andras Kovacs in his \textit{elaboration-zoo} \footnote{\url{https://github.com/AndrasKovacs/elaboration-zoo}}.
 There, the type of each term is calculated during normalization and then stored with the normalized term, so it can be inspected as needed during the equality check.
@@ -217,51 +272,60 @@ It could be the case that handling type-directed rules causes untenable performa
 On the other hand, one of the approaches to handling them described above could have minimal performance cost and be quite simple to implement.
 The problem is that no comparison between them has been made, and so there is currently no good way to decide between them.
 
-\subsection{Proposal}
+\subsection{Thesis Statement}
+We propose that the algorithm described by \citet{Chapman2005} will perform as well as a purely syntax-directed approach while allowing for theories with a stronger, type-directed, judgemental equality.
+The rest of this thesis is split into two parts.
+First we define exactly what these two approaches to judgemental equality are, and how an algorithm for deciding the type-direct equality can be derived from the bidirectional recipe.
+Then we present the results of a performance comparison between Kovac's smalltt, which uses a syntax-directed equality, and version of smalltt we modified to use a type-directed equality.
 
-\todo{This should become thesis statement stuff}
+\done\todo{This should become thesis statement stuff}
 
-I theorize that the algorithm described by \citet{Chapman2005} will perform as well as a purely syntax-directed approach while allowing for theories with a stronger, type-directed, judgemental equality.
-This belief is based on previous experience implementing a type checker for a dependently typed language.
-At the point in the type checker where two terms must be checked for judgemental equality, their type has already been calculated.
-Therefore passing that type into the procedure which decides judgemental equality should have minimal overhead.
-
-Furthermore, I propose a generalization of the ad-hoc design of this algorithm, to a systematic recipe inspired by bidirectional type checking.
-
-In general, judgemental equality rules can be split into two categories \citep{MartinLof1975}.
-The first are called $\beta$ rules, and they occur when a destructor and constructor for some type come into contact.
-The prototypical example for this is for functions.
-When the destructor for functions, function application, meets the constructor for functions, lambda expressions, we get the following judgemental equality rule.
-
-\begin{mathpar}
-  \inferrule*[left=(Fun-$\beta$)]{ }{\Gamma \vdash (\lambda x. b) a = b[x := a] : B}
-\end{mathpar}
-
-The second category of rules are called $\eta$ rules.
-These rules specify that two elements of a type are equal when applying the destructors for that type to both elements yield equal results.
-The eta rule for functions can be given as the following.
-
-\begin{mathpar}
-  \inferrule*[left=(Fun-$\eta$)]{\Gamma, x : A \vdash f(x) = f'(x) : B}{\Gamma \vdash f = f' : A \rightarrow B}
-\end{mathpar}
-
-My proposed systematic recipe, and how previous NbE interpreters have been implicitly designed, is to apply the $\beta$ rules during normalization, then augment the syntactic equality check with the $\eta$ rules.
-
-\hfill\break
-
-\textit{smalltt} already implements a pure syntax-directed judgemental equality in the vein of \citet{Coquand1996}.
-So, to test my claim that my proposed approach retains the performance of the syntax-directed approach, I will modify \textit{smalltt} to use the algorithm described by \citet{Chapman2005}.
-Then, this modified version will be benchmarked against the original \textit{smalltt} with the existing benchmark suite provided by \textit{smalltt}.
-Additionally, to test my systematic recipe, and demonstrate the ability to decide type-directed rules, dependent sums and the unit type, along with their associated $\beta$ and $\eta$ rules as described in \citet{Chapman2005}, will be added to my modified version of \textit{smalltt}.
+% I theorize that the algorithm described by \citet{Chapman2005} will perform as well as a purely syntax-directed approach while allowing for theories with a stronger, type-directed, judgemental equality.
+% This belief is based on previous experience implementing a type checker for a dependently typed language.
+% At the point in the type checker where two terms must be checked for judgemental equality, their type has already been calculated.
+% Therefore passing that type into the procedure which decides judgemental equality should have minimal overhead.
+% 
+% Furthermore, I propose a generalization of the ad-hoc design of this algorithm, to a systematic recipe inspired by bidirectional type checking.
+% 
+% In general, judgemental equality rules can be split into two categories \citep{MartinLof1975}.
+% The first are called $\beta$ rules, and they occur when a destructor and constructor for some type come into contact.
+% The prototypical example for this is for functions.
+% When the destructor for functions, function application, meets the constructor for functions, lambda expressions, we get the following judgemental equality rule.
+% 
+% \begin{mathpar}
+%   \inferrule*[left=(Fun-$\beta$)]{ }{\Gamma \vdash (\lambda x. b) a = b[x := a] : B}
+% \end{mathpar}
+% 
+% The second category of rules are called $\eta$ rules.
+% These rules specify that two elements of a type are equal when applying the destructors for that type to both elements yield equal results.
+% The eta rule for functions can be given as the following.
+% 
+% \begin{mathpar}
+%   \inferrule*[left=(Fun-$\eta$)]{\Gamma, x : A \vdash f(x) = f'(x) : B}{\Gamma \vdash f = f' : A \rightarrow B}
+% \end{mathpar}
+% 
+% My proposed systematic recipe, and how previous NbE interpreters have been implicitly designed, is to apply the $\beta$ rules during normalization, then augment the syntactic equality check with the $\eta$ rules.
+% 
+% \hfill\break
+% 
+% \textit{smalltt} already implements a pure syntax-directed judgemental equality in the vein of \citet{Coquand1996}.
+% So, to test my claim that my proposed approach retains the performance of the syntax-directed approach, I will modify \textit{smalltt} to use the algorithm described by \citet{Chapman2005}.
+% Then, this modified version will be benchmarked against the original \textit{smalltt} with the existing benchmark suite provided by \textit{smalltt}.
+% Additionally, to test my systematic recipe, and demonstrate the ability to decide type-directed rules, dependent sums and the unit type, along with their associated $\beta$ and $\eta$ rules as described in \citet{Chapman2005}, will be added to my modified version of \textit{smalltt}.
 
 \section{Main Ideas}
 
 \todo{Previous section only covered equality in broad strokes. Be clear that here we are going clearly define the two approaches we want to compare.}
 \todo{Explain normal forms. How we use them to decide the beta equalities and if something is a specific type constructor. And also how we then only define the equality judgement for normal forms.}
 
-We first present both syntax and type directed equality for a small dependent type theory in which the two equalities differ only in presentation.
-Then, to show that the type directed equality is more general, we extend the theory with both the unit type and dependent pairs \todo{don't imply that dependent pairs are different in type directed equality, just that we want them to show off the recipe}.
-The theory we present is similar to that proposed in \citet{altenkirch2010}.
+Here we define the syntax and type-directed judgmental equalities, and also demonstrate the close connection between the type-directed equality rules and the bidirectional typing rules.
+We first present both syntax and type-directed equalities for a small dependent type theory in which the two equalities differ only in presentation.
+Then, to show that the type-directed equality supports more rules than the syntax-directed equality, we extend the theory with both the unit type and dependent pairs \todo{don't imply that dependent pairs are different in type directed equality, just that we want them to show off the recipe}.
+
+Our purpose here is to give the reader a rigorous understanding of what these two equalities are and how they are implemented in smalltt.
+Therefore we present the theory in a form very close to that of both smalltt implementations.
+We also don't prove any theorems about this theory.
+However, the theory we present is very similar to that proposed in \citet{altenkirch2010}.
 
 \subsection{Syntax and Semantics}
 
@@ -294,6 +358,10 @@ The theory we present is similar to that proposed in \citet{altenkirch2010}.
 Before defining the two kinds of judgmental equality, we must first define the theory whose terms we want to judge equal.
 The syntax is presented in \autoref{fig:base-syntax}.
 It consists of expressions $e$ which are either variables $x$, function introduction or elimination forms, dependent function types, the type universe, or a type annotation.
+We also define a subset of expressions called normal forms.
+These are expressions which only contain redexes that are inside a binding form.
+We will use these to represent the types during type checking since we don't need to do anything to them to see if they are a type constructor.
+For example, if we used all expression to represent types, we could have $\appE{(\lamE{x}{\piE{y}{\unittE}{\unittE}})}{\unitE}$ which we would need to reduce to $\piE{y}{\unittE}{\unittE}$ to know that it is a type constructor.
 
 \begin{figure}[!htb]
   \fbox{$\steps{e}{n}$}
@@ -346,9 +414,8 @@ It consists of expressions $e$ which are either variables $x$, function introduc
   \label{fig:base-big-step}
 \end{figure}
 
-We then define the operational semantics for the theory in \autoref{fig:base-big-step}.
-The judgement $\steps{e}{e'}$ means that the expression $e$ steps to $e'$.
-Since this judgement may be applied to terms with free variables, $e'$ may not be a value, but could instead be a neutral form \todo{value and neutral form use without def. maybe introduce syntactic categories for them and then have the stepping rule have a value output?}.
+In \autoref{fig:base-big-step} we define the operational semantics for the theory.
+In addition to being a semantics for the theory, we can view these rules as a method for turning an expression into its corresponding normal form.
 
 \begin{figure}[!htb]
   \fbox{$\checkJ{\Gamma}{e}{n_t}$} \\
@@ -410,13 +477,13 @@ Since this judgement may be applied to terms with free variables, $e'$ may not b
 \end{figure}
 
 Finally, we present the typing rules for the theory in a bidirectional style \citep{dunfield2019}.
-The judgment $\checkJ{\Gamma}{e}{e_t}$ means that the term $e$ checks against the type $e_t$ under the context $\Gamma$.
-It is formulated such that it can be decided when given concrete terms for $\Gamma$, $e$, and $e_t$.
-The judgment $\synthJ{\Gamma}{e}{e_t}$ means that the type $e_t$ can be inferred for the term $e$ under the context $\Gamma$.
-It is formulated such that given the concrete terms for $\Gamma$ and $e$, it can be decided if there exists an $e_t$ such that the judgment holds.
+The check judgment $\checkJ{\Gamma}{e}{e_t}$ means that the term $e$ checks against the type $n_t$ under the context $\Gamma$.
+It is formulated such that it can be decided when given concrete terms for $\Gamma$, $e$, and $n_t$.
+The synth judgment $\synthJ{\Gamma}{e}{e_t}$ means that the type $n_t$ can be inferred for the term $e$ under the context $\Gamma$.
+It is formulated such that given the concrete terms for $\Gamma$ and $e$, it can be decided if there exists an $n_t$ such that the judgment holds.
 
-The Conv \todo{add label and reference for Conv} rule uses the typed equality judgment $\tyEqJ{\Gamma}{e_a}{e_b}{e_t}$ which we deliberately haven't defined yet.
-In the next two subsections we will present two different versions of this judgment, the syntax directed version which can be decided by only considering $\Gamma$, $e_a$, and $e_b$, and the type directed version which also needs to consider $e_t$.
+The Conv \todo{add label and reference for Conv} rule uses the typed equality judgment $\tyEqJ{\Gamma}{n_a}{n_b}{n_t}$ which we deliberately haven't defined yet.
+In the next two subsections we will present two different versions of this judgment, the syntax directed version which can be decided by only considering $\Gamma$, $n_a$, and $n_b$, and the type directed version which also needs to consider $n_t$.
 
 \subsection{Syntax Directed Equality}
 
@@ -495,16 +562,26 @@ In the next two subsections we will present two different versions of this judgm
 
 In \autoref{fig:base-syntax-directed-equality} we define the typed equality judgement by appealing to the syntax directed equality judgement $\stxEqJ{\Theta}{n_a}{n_b}$.
 The $\pi$=, $\eta$-l, and $\eta$-r rules require adding fresh variables to the context.
-Hstrip-owever, we don't know what type these new variables should be given in the $\eta$ cases.
+However, we don't know what type these new variables should be given in the $\eta$ cases.
 Therefore we use $\Theta$ in the syntax directed equality judgement instead of $\Gamma$, and use strip-types to turn a type context into a scope.
-\todo{elaborate on how $\eta$ works here}.
+
+Since we are already given terms in normal form, we don't need to consider $\beta$ equalities until we get to a binding form.
+In these cases, specifically the $\pi$=, $\eta$-l, and $\eta$-r rules, we use the big step semantics from \autoref{fig:base-big-step} to reduce all expressions to their normal form before continuing.
+
+In the $\eta$-l and $\eta$-r rules we use a trick to decide the $\eta$ rule for dependent function from only the syntax.
+In a normal form, there are only two cases which could be given a function type.
+Either the normal form is a function literal, or it is a neutral term.
+If both sides of the equality are neutral terms, then applying the $\eta$ rule won't change anything.
+Therefore, we only have to apply the function $\eta$ rule in cases where at least one side of the equality is a function literal, leading us to defining our two $\eta$ rules.
+
+\done\todo{elaborate on how $\eta$ works here}
 
 \subsection{Type Directed Equality}
 
 \begin{figure}[!htb]
   \fbox{$\tyEqJ{\Gamma}{n_a}{n_b}{n_t}$} \\\\
   \fbox{$\chkEqJ{\Gamma}{n_a}{n_b}{n_t}$} \\\\
-  \fbox{$\synEqJ{\Gamma}{n_a}{n_b}{n_t}$} \\\\
+  \fbox{$\synEqJ{\Gamma}{\nu_a}{\nu_b}{n_t}$} \\\\
 
   \begin{mathpar}
     \inferrule*
@@ -513,7 +590,7 @@ Therefore we use $\Theta$ in the syntax directed equality judgement instead of $
     { \tyEqJ{\Gamma}{n_a}{n_b}{n_t}
     }
 
-    \inferrule*[left=$\eta$]
+    \inferrule*[left=Fun-$\eta$]
     { \freshJ{\Gamma}{y} \\
       \steps{\appE{n_a}{y}}{n_a'} \\
       \steps{\appE{n_b}{y}}{n_b'} \\
@@ -540,9 +617,9 @@ Therefore we use $\Theta$ in the syntax directed equality judgement instead of $
     }
 
     \inferrule*[left=Conv${=}$]
-    { \synEqJ{\Gamma}{n_a}{n_b}{n_t'}
+    { \synEqJ{\Gamma}{\nu_a}{\nu_b}{n_t'}
     }
-    { \chkEqJ{\Gamma}{n_a}{n_b}{n_t}
+    { \chkEqJ{\Gamma}{\nu_a}{\nu_b}{n_t}
     }
 
     \inferrule*[left=Var${=}$]
@@ -563,21 +640,31 @@ Therefore we use $\Theta$ in the syntax directed equality judgement instead of $
   \label{fig:base-type-directed-equality}
 \end{figure}
 
-In \autoref{fig:base-type-directed-equality} we define the typed equality judgement in terms of the equality check judgment $\chkEqJ{\Gamma}{n_a}{n_b}{n_t}$ and the equality synth judgment $\synEqJ{\Gamma}{n_a}{n_b}{n_t}$ \todo{make sure that synth and check judgments terminology is introduced when discussing typing judgments}.
+In \autoref{fig:base-type-directed-equality} we define the typed equality judgement in terms of the equality check judgment $\chkEqJ{\Gamma}{n_a}{n_b}{n_t}$ and the equality synth judgment $\synEqJ{\Gamma}{n_a}{n_b}{n_t}$.\done\todo{make sure that synth and check judgments terminology is introduced when discussing typing judgments}
 The structure of these two judgments closely follows the structure of the synth and check typing judgments from \autoref{fig:base-typing-rules}.
 Like the type check judgment, the equality check judgment can be decided when all of $\Gamma$, $n_a$, $n_b$, and $n_t$ are provided.
 And similarily, given $\Gamma$, $n_a$, and $n_b$, it can be decided if there exists an $n_t$ such that the equality synth judgment holds.
 
-Most of the type directed equality rules follow the same structure as their corresponding bidirectional typing rules.
+We use two tricks to decide these rules.
+Firsly, we always start comparing normal forms using the equality check judgment.
+This way we always have the type we are comparing at available, so we can apply $\eta$ rules based on it.
+Secondly, the places in which normal forms appear in neutral terms (e.g. the argument of a function application) correspond to places which use the check typing judgment during type checking.
+Therefore, we can infer the type of these neutral terms and then apply the equality check judgment to them, as required by our first trick.
+
+In fact, most of the type directed equality rules follow the same structure as their corresponding bidirectional typing rules.
 For example, the App= rule corresponds to the $\Pi$-E typing rule and follows the same structure where synth judgment is applied to the function, and then the check judgment is applied to the argument.
-However, the $\eta$ rule differs from this pattern.
+However, the Fun-$\eta$ rule differs from this pattern.
 Instead of following the structure of the $\Pi$-I typing rule, it uses the function extensionality principle to convert the problem of equality at the dependent function type into that of equality at the codomain type.
+
+Therefore, we can reuse the Pfenning bidirectional typing recipe \citep{dunfield2019} to derive the type directed equality rules.
+The only change we make is to replace the introduction rules for types with an $\eta$ rule we want to decide with the $\eta$ rule.
 
 \subsection{Unit and Dependent Pair Types}
 
 Up until this point, the syntax and type directed equalities have really been the same equality but presented in two different ways.
-However, once we add the Unit type this changes, since the extensionality principle for the Unit is not decidable using the syntax directed equality.
-Additionally, we add the dependent pair type to further illustrate how the type directed equality rules closely relate to the bidirectional typing rules.
+This is because the $\eta$ rule for dependent functions can be decided both by the syntax and type-directed equalities.
+However, once we add the Unit type this changes, since the $\eta$ rule for the unit type is not decidable by the syntax directed equality.
+Additionally, we add the dependent pair type to further illustrate how the type directed equality rules closely follow from to the bidirectional typing rules.
 
 \begin{figure}[!htb]
   \begin{displaymath}
@@ -712,7 +799,7 @@ The semantics presented for the unit and dependent pairs in \autoref{fig:unit-de
 
 \begin{figure}[!htb]
   \begin{mathpar}
-    \inferrule*[left=$\Sigma$-IL${=}$]
+    \inferrule*[left=$\Sigma$-$\eta$-L]
     { \steps{\fstE{n}}{n_f'} \\
       \steps{\sndE{n}}{n_s'} \\
       \stxEqJ{\Theta}{n_f}{n_f'} \\
@@ -721,7 +808,7 @@ The semantics presented for the unit and dependent pairs in \autoref{fig:unit-de
     { \stxEqJ{\Theta}{\pairE{n_f}{n_s}}{n}
     }
 
-    \inferrule*[left=$\Sigma$-IR${=}$]
+    \inferrule*[left=$\Sigma$-$\eta$-R]
     { \steps{\fstE{n}}{n_f'} \\
       \steps{\sndE{n}}{n_s'} \\
       \stxEqJ{\Theta}{n_f}{n_f'} \\
@@ -768,7 +855,12 @@ The semantics presented for the unit and dependent pairs in \autoref{fig:unit-de
   \label{fig:unit-dependent-pair-syntax-directed-equality}
 \end{figure}
 
-\todo{See what to write here after going back over intro}
+In \autoref{fig:unit-dependent-pair-syntax-directed-equality} we present the syntax-directed equality for the unit and dependent pairs.
+We use a trick to decide the $\eta$ rule for dependent pairs similar to that used to syntactially decide the $\eta$ rule for dependent functions.
+However, the same trick doesn't work for the unit $\eta$ rule.
+In the case of dependent functions and pairs, if the terms being compare were both neutral, then applying the corresponding $\eta$ rule doesn't make a difference.
+But, for the unit type it does make a difference, since we can judge any two neutrals equal using the unit $\eta$ rule.
+Therefore, in general, we have to have the type of the two terms available to know when we should apply the unit $\eta$ rule.
 
 \begin{figure}[!htb]
   \begin{mathpar}
@@ -807,7 +899,7 @@ The semantics presented for the unit and dependent pairs in \autoref{fig:unit-de
     { \synEqJ{\Theta}{\sndE{\nu}}{\sndE{\nu'}}{n_2}
     }
 
-    \inferrule*[left=$\unittE$-I${=}$]
+    \inferrule*[left=$\unittE$-$\eta$]
     {
     }
     { \chkEqJ{\Gamma}{n}{n'}{\unittE}
@@ -823,7 +915,7 @@ The semantics presented for the unit and dependent pairs in \autoref{fig:unit-de
   \label{fig:unit-dependent-pair-type-directed-equality}
 \end{figure}
 
-\todo{See what to write here after going back over intro}
+Finally, in \autoref{fig:unit-dependent-pair-type-directed-equality} we present the type directed equality rules for the unit and dependent pair types.
 
 \section{Methods}
 
